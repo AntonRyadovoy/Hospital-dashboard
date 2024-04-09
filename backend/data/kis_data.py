@@ -25,6 +25,7 @@ today = date.today
 
 def dates_period(days_amount):
     period = [str(today() - timedelta(days=days)) for days in range(days_amount)]
+    period.reverse()
     return period
 
 
@@ -281,19 +282,14 @@ class DataForDMK(DataProcessing):
          for inserting data to db directly when needed.
         :return:
         """
-        result = Counter()
+        if raw_rtype:
+            return dh_dataset
         profiles_queryset = Profiles.objects.filter(active=True)
         # Creating dict with dept names and ids.
         profiles = [profile.profile_id for profile in profiles_queryset]
-        # Summ common amount of patients by all depts with the same name.
-        for dept, value in dh_dataset:
-            result[dept] += value
-        summed_depts = [(k, v,) for k, v in result.items()]
-        if raw_rtype:
-            return summed_depts
         # Create list and filling it separated resulting dicts mapping with current active profiles.
         result_dicts = []
-        for row in summed_depts:
+        for row in dh_dataset:
             profile_id = row[0]
             number = row[1]
             if profile_id in profiles:

@@ -43,7 +43,7 @@ class Initializer:
 
     def initialize_period(self):
         """Initializes data collection and writing for a specified period of days."""
-        id_cnt = 0
+        id_cnt = 3000
         dates = dates_period(self.period)
         cursor = connection.cursor()
         for date in dates:
