@@ -18,8 +18,8 @@ schedule1, _ = CrontabSchedule.objects.get_or_create(
 
 # Schedule for acuumulativing logic - inserting data to DMK
 schedule2, _ = CrontabSchedule.objects.get_or_create(
-    minute='0',
-    hour='6',
+    minute='59',
+    hour='5',
     day_of_week='*',
     day_of_month='1',
     month_of_year='*',

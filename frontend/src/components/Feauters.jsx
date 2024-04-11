@@ -184,7 +184,7 @@ export function getMainDMK(dmkData, day) {
     yesterday.setDate(today.getDate() - 1)
   
     const currentTime = today.toLocaleTimeString();
-    const currentHour = currentTime.split(':')[0].slice(1);
+    const currentHour = currentTime.split(':')[0];
   
     if (day === 'yesterday') {
       today.setDate(today.getDate() - 1);
@@ -192,7 +192,7 @@ export function getMainDMK(dmkData, day) {
     } 
   
     let formattedDate;
-    currentHour > 6 ? formattedDate = formatDate(today) : formattedDate = formatDate(yesterday);
+    currentHour >= 6 ? formattedDate = formatDate(today) : formattedDate = formatDate(yesterday);
   
     let mainDMK;
     const index = dmkData.findIndex(item => item.dates === formattedDate);
