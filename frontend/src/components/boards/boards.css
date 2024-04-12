@@ -1,0 +1,50 @@
+/* Cards design */
+.boards {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  height: max-content;
+  padding: 10px;
+  margin: 10px;
+  border: 2px solid #e9306a;
+  box-shadow: 4px 13px 20px 0px #001a3f;
+  border-radius: 15px;
+  /*background: linear-gradient(0deg, #4884cd, #78b1f8);*/
+  background: #ccd0d9;
+}
+
+/* Data gotten by API in card */
+.text_data {
+  font-family: 'nbold', Courier, monospace;
+  text-align: center;
+  font-size: 30px;
+  font-weight: bold;
+  color: #001a3f;
+  margin: 8px
+}
+
+.percent {
+  font-family: 'nbold', Courier, monospace;
+  font-size:20px;
+  height: 0;
+  position: relative;
+  bottom: 40px;
+  left: 55px;
+  color: #001a3f;
+}
+
+.headers {
+  margin-bottom: 10px;
+  font-size: 25px;
+  font-family: 'nbold',sans-serif;
+  font-weight: bold;
+  color:#001a3f
+}
+
+.logo {
+  height: 60px;
+  width: 90px;
+  border-radius: 10px;
+}
