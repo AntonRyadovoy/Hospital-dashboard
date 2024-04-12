@@ -269,38 +269,7 @@ class QuerySets:
                  'Отделение реанимации и интенсивной терапии для больных с острым инфарктом миокарда',
                  'Отделение анестезиологии-реанимации'
                 ]
-
-    # Dict for mapping with serializer fields (relates to "план/факт по профилям" table).
-    # All english names is fields of serializer.
-    profiles_mapping = {
-        'анестезиологии и реаниматологии': 'oar_p',
-        'хирургии': 'surgery_p',
-        'терапии': 'therapy_p',
-        'неотложной медицинской помощи': 'emer1_p',
-        'акушерству и гинекологии (за исключением использованиявспомогательных репродуктивных технологий)': 'gynekology_p',
-        'рентгенологии': 'xray_p',
-        'скорой медицинской помощи': 'emer2_p',
-        'трансфузиологии': 'transfusiology_p',
-        'общей практике': 'gpractice_p',
-        'наркологии': 'narkology_p',
-        'урологии': 'urology_p',
-        'клинической лабораторной диагностике': 'lab_p',
-        'реаниматологии': 'rean_p',
-        'травматологии и ортопедии': 'truma_p',
-        'нейрохирургии': 'neuro_p',
-        'ультразвуковой диагностике': 'ultrasound_p',
-        'функциональной диагностике': 'func_p',
-        'кардиологии': 'cardio_p',
-        'эндокринологии': 'endo_p',
-        'неврологии': 'neurology_p',
-        'медицинской статистике': 'static_p',
-        'эпидемиологии': 'epid_p',
-        'неонатологии': 'neon_p',
-        'гистологии': 'gyst_p',
-        'эндоскопии': 'endocop_p',
-        'пульмонологии': 'pulmo_p'
-    }
-
+    
     # Dict for mapping columns on russian language with serializer fields (relates to "выписанные по отделениям" table).
     # All english names is fields of serializer.
     depts_mapping = {
