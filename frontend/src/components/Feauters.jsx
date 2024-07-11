@@ -1,19 +1,13 @@
 import { format, subHours } from 'date-fns';
 import { formatDate } from './dates/DatesFormat';
 
-export const currentDatetime = new Date().toLocaleDateString('ru-RU');
+export const currentDatetime = new Date().toLocaleDateString('ru-RU') + 'г. 06:00ч.';
 
 
 export function DateFormatting(date) {
-  // const dateString = "2024-01-10T00:40:15+03:00";
   const dateTimeObject = new Date(date);
-  
-  // Subtract 3 hours
   const subtractedDate = subHours(dateTimeObject, 3);
-  
-  // Format the result
   const formattedSubtractedDate = format(subtractedDate, 'dd.MM.yyyy HH:mm:ss');
-  
   return formattedSubtractedDate
 };
 
@@ -32,9 +26,10 @@ export function CustomMap(currentDay, yesterday, branch) {
 
 
 export function Persents(today, yesterday) {
-
-    let percent = ((today-yesterday)/yesterday*100).toFixed(1)
-    percent = percent.toString() + '%'
+    const result = today-yesterday;
+    yesterday = (yesterday === 0) ? today : yesterday;
+    let percent = (result/yesterday*100).toFixed(1);
+    percent = percent.toString() + '%';
     percent = percent.replace('-', '');
     return percent
 };
@@ -47,6 +42,16 @@ export const extractProperty = (dataList, key) => {
 
 export const extractProperties = (dataList, propertyKey) => {
   return dataList.map(item => ({ dates: item.dates, [propertyKey]: item[propertyKey] }));
+};
+
+
+export const extractDetailsProperties = (dataList, propertyKey) => {
+  return dataList.map(item => {
+    const propertyValue = item[propertyKey];
+    const registeredPatients = propertyValue && propertyValue['registered_patients'] ? propertyValue['registered_patients'] : null;
+    
+    return { dates: item.dates, [propertyKey]: registeredPatients };
+  });
 };
 
 
@@ -74,9 +79,50 @@ export function ensureArrayLength(array, desiredLength) {
   }
 };
 
+export function RefuseDetailTableProcess(dataset) {
+
+  const modifiedObjects = dataset.map(item => {
+    return {
+      'ФИО пациента': item.pat_fio,
+      '№ ИБ': item.ib_num,
+      'ФИО врача': item.doc_fio,
+      'Диагноз': item.diag,
+      'Причина отказа': item.refuse_reason,
+      'Дата отказа': DateFormatting(item.refuse_date)
+    };
+  });  
+  
+  return modifiedObjects;
+};
+
+export function TotalRefuseTableProcess(dataset) {
+
+  const modifiedObjects = dataset.map(item => {
+    return {
+      'ФИО врача': item.doc_fio,
+      'кол-во отказов': item.refuses_amount
+    };
+  });  
+  
+  return modifiedObjects;
+};
+
+export function EmergencyTableProcess(dataset) {
+
+  const modifiedObjects = dataset.map(item => {
+    return {
+      'ФИО пациента': item.pat_fio,
+      '№ ИБ': item.ib_num,
+      'Отделение': item.dept,
+      'Время ожидания': item.waiting_time,
+      'ФИО врача': item.doc_fio
+    };
+  });  
+  
+  return modifiedObjects;
+};
+
 export function DeadTableProcess(dataset) {
-  console.log(dataset)
-  // Using map to transform each item in the dataset
   const modifiedObjects = dataset.map(item => {
     return {
       'ФИО': item.pat_fio,
@@ -87,17 +133,34 @@ export function DeadTableProcess(dataset) {
       'Дата поступления': DateFormatting(item.arriving_dt),
       'Состояние при поступлении': item.state,
       'Кол-во койко дней': item.days,
-      'Дигноз при поступлении': item.diag_arr,
-      'Дигноз при выписке': item.diag_dead
+      'Диaгноз при поступлении': item.diag_arr,
+      'Диaгноз при выписке': item.diag_dead,
+      'Лечащий врач': item.doc_fio
     };
   });
 
-  // Returning the array of modified objects
+  return modifiedObjects;
+};
+
+export function PlanHospProcess(dataset) {
+  const modifiedObjects = dataset.map(item => {
+    return {
+      'Отделение': item.dept,
+      'Пн': item.mon,
+      'Вт': item.tue,
+      'Ср': item.wed,
+      'Чт': item.thu,
+      'Пт': item.fri,
+      'Сб': item.sat,
+      'Вс': item.sun,
+      'Вне диапазона': item.other
+    };
+  });
+
   return modifiedObjects;
 };
 
 export function ArrivedOarTable(dataset) {
-
   const modifiedObjects = dataset.map(item => {
     return {
       'ФИО': item.pat_fio,
@@ -105,7 +168,7 @@ export function ArrivedOarTable(dataset) {
       'Возраст': item.age,
       'Отделение': item.dept,
       'Лечащий врач': item.doc_fio,
-      'Дигноз при поступлении': item.diag_start,
+      'Диагноз при поступлении': item.diag_start,
 
     };
   });
@@ -123,9 +186,9 @@ export function MovedOarTable(dataset) {
       'Возраст': item.age,
       'Отделение': item.dept,
       'Лечащий врач': item.doc_fio,
-      'Дигноз при поступлении': item.diag_start,
+      'Диагноз при поступлении': item.diag_start,
       'Дата перевода': DateFormatting(item.move_date),
-      'Переведен из': item.from_dept
+      'Переведён из': item.from_dept
     };
   });
 
@@ -142,7 +205,7 @@ export function CurrentOarTable(dataset) {
       'Отделение': item.dept,
       'Койко дней': item.days,
       'Лечащий врач': item.doc_fio,
-      'Дигноз при поступлении': item.diag_start
+      'Диагноз при поступлении': item.diag_start
     };
   });
 
@@ -162,8 +225,8 @@ export function DeadsOarTable(dataset) {
       'Дата поступления': DateFormatting(item.arriving_dt),
       'Состояние при поступлении': item.state,
       'Кол-во койко дней': item.days,
-      'Дигноз при поступлении': item.diag_arr,
-      'Дигноз при выписке': item.diag_dead
+      'Диагноз при поступлении': item.diag_arr,
+      'Диагноз при выписке': item.diag_dead
     };
   });
 
@@ -172,31 +235,63 @@ export function DeadsOarTable(dataset) {
 
 
 export function GetNameOfDay(dateString) {
-  return ['Вск', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+  return ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
   [new Date(dateString).getDay()];
 }
 
 
+export function getMainDMK(dmkData, day) {
 
-export function getYesterdayDate() {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday
+    let today = new Date();
+    let yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1)
+  
+    const currentTime = today.toLocaleTimeString();
+    const currentHour = currentTime.split(':')[0];
+  
+    if (day === 'yesterday') {
+      today.setDate(today.getDate() - 1);
+      yesterday.setDate(yesterday.getDate() - 1);
+    } 
+  
+    let formattedDate;
+    currentHour >= 6 ? formattedDate = formatDate(today) : formattedDate = formatDate(yesterday);
+  
+    let mainDMK;
+    const index = dmkData.findIndex(item => item.dates === formattedDate);
+  
+    if (index !== -1) {
+      mainDMK = dmkData[index];
+    } else {
+      mainDMK = { dates: formattedDate, arrived: null, hosp: null, refused: null,
+                  signout: null, deads: null, reanimation: null };
+    }
+    
+    return mainDMK;
+}
+
+export function getOrderedWeekDays() {
+  const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const currentDayIndex = (new Date().getDay() + 6) % 7;
+  return days.slice(currentDayIndex).concat(days.slice(0, currentDayIndex));
 }
 
 
+export function GetFutureWeek() {
+  const today = new Date();
 
-export function getMainDMK(dmkData, day) {
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
 
-  let mainDMK;
-  const index = dmkData.findIndex(item => item.dates === formatDate(day));
+    const dayOfWeek = date.toLocaleDateString('ru-RU', { weekday: 'short' });
+    const dayOfWeekCapitalized = dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1);
 
-  if (index !== -1) {
-    mainDMK = dmkData[index];
-  } else {
-    mainDMK = { dates: formatDate(day), arrived: null, hosp: null, refused: null,
-                signout: null, deads: null, reanimation: null };
-  }
-  
-  return mainDMK;
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+
+    return `${dayOfWeekCapitalized} ${day}.${month}`;
+  });
+
+  return weekDates;
 }

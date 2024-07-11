@@ -26,16 +26,27 @@ class MainData(models.Model):
         ]
 
 
+class MainDataDetails(models.Model):
+    """
+    Represent table with detailing of main data.
+
+    Using for potential adding new fields related to details of some field from MaiData model.
+    """
+    maindata = models.OneToOneField(MainData, on_delete=models.CASCADE, primary_key=True)
+    registered_patients = models.IntegerField()
+
+
 class Profiles(models.Model):
 
-    name = models.CharField(max_length=180, verbose_name='Название профиля')
+    profile_id = models.IntegerField(primary_key=True)
+    name = models.CharField(max_length=50, verbose_name='Название профиля')
     active = models.BooleanField(default=True, verbose_name='Статус')
 
     def __str__(self):
-        return f'ID: {self.id}, Профиль: {self.name}, Активен: {"Да" if self.active else "Нет"}'
+        return f'ID: {self.profile_id}, Профиль: {self.name}, Активен: {"Да" if self.active else "Нет"}'
 
     def __repr__(self):
-        return f'Profile(name=\'{self.name}\', active={self.active})'
+        return f'Profile(profile_id=\'{self.profile_id}\', name=\'{self.name}\', active={self.active})'
 
     class Meta:
         verbose_name = 'Профиль'
@@ -67,7 +78,6 @@ class PlanNumbers(models.Model):
 
     profile = models.OneToOneField(Profiles, on_delete=models.CASCADE, verbose_name='Профиль', primary_key=True)
     plan = models.IntegerField(verbose_name='План')
-    active = models.BooleanField(verbose_name='Статус')
 
     class Meta:
         indexes = [
@@ -78,6 +88,18 @@ class PlanNumbers(models.Model):
         ordering = ['profile']
 
     def __str__(self):
-        return f'Profile_id: {self.profile.id}, Профиль: {self.profile.name},' \
-               f' текущий план: {self.plan}, статус: {"Активен" if self.active else "Не активен"}'
+        return f'Profile_id: {self.profile.profile_id}, Профиль: {self.profile.name}, Текущий план: {self.plan}'
+
+
+class ChartPlans(models.Model):
+    """Represent table containing values of plans for main charts."""
+
+    chart_name = models.CharField(max_length=25, null=False)
+    plan_value = models.IntegerField()
+
+    class Meta:
+        verbose_name = 'План'
+        verbose_name_plural = 'Планы по пациентам'
+        ordering = ['chart_name']
+
 

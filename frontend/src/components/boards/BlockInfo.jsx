@@ -13,15 +13,15 @@ const BlockInfo = ({data, headerText}) => {
     config: { duration: 500 },
   });
 
-  const imagePath = data && data[0] > data[1] ? '/images/dynamic_high.png' : '/images/dynamic_low.png';
-  const reverseImagePath = data && data[1] > data[0] ? '/images/dynamic_high.png' : '/images/dynamic_low.png';
+  const imagePath = data && data[0] > data[1] ? '/images/a_up2.svg' : '/images/a_down2.svg';
+  const reverseImagePath = data && data[1] > data[0] ? '/images/a_up2.svg' : '/images/a_down2.svg';
 
   return (
     <animated.div className='boards' style={props}>
       <>
         <span className='headers'>{headerText}</span>
         <p className='text_data'>{data[0]}</p>
-          {headerText === 'Отказано' ? (
+          {['Отказано', 'Умершие', 'ОАР'].includes(headerText) ? (
             <img src={reverseImagePath} className='logo' alt=''/>
             ) : (
             <img src={imagePath} className='logo' alt=''/>

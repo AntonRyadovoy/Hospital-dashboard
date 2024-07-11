@@ -4,19 +4,31 @@ import { CurrentOarTable } from '../../Feauters';
 import DataContext from '../../DataContext';
 import '../signout_detail_board/signout_table.css';
 
+const oarCurrentColumns = ['ФИО', '№ ИБ', 'Возраст', 'Койко дней',
+                           'Лечащий врач', 'Диагноз при поступлении']
 
 const InOARDetailTable = ({ departament }) => {
 
   const oars = useContext(DataContext).kis;
 
-  let current = oars.oar_current;
-  current = CurrentOarTable(current);
+  let current;
+  let filteredData;
 
-  const filteredData = current
-  .filter(dict => dict['Отделение'] === departament);
+  if (oars.oar_current.length > 0) {
+    current = CurrentOarTable(oars.oar_current);
+    filteredData = current
+      .sort((a, b) => {
+        if (a['ФИО'] < b['ФИО']) return -1;
+        if (a['ФИО'] > b['ФИО']) return 1;
+        return 0;
+      })
+      .filter(dict => dict['Отделение'] === departament)
+      .map(({ Отделение, ...rest }) => rest);
+  } else {
+    filteredData = [];
+  }
 
-  const columns = Object.keys(current[0])
-  .filter(key => key !== 'Отделение')
+  const columns = oarCurrentColumns
   .map(key => ({
     Header: key,
     accessor: key,
@@ -31,7 +43,7 @@ const InOARDetailTable = ({ departament }) => {
   return (
     <div className='deads-table-container'>
       <h2 className='detail_block_header'> Детализация по отделению </h2>
-      <table className='deads-table' {...getTableProps()} >
+      <table className='table' {...getTableProps()} >
         <thead>
           {headerGroups.map(headerGroup => (
             <tr {...headerGroup.getHeaderGroupProps()}>

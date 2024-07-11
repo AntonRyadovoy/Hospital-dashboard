@@ -22,11 +22,11 @@ ALLOWED_HOSTS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:9000',
-    'http://127.0.0.1:3000',
-    'http://0.0.0.0:3000',
-    'http://10.123.8.17:9000'
+    'http://10.123.8.17:3000',
+    'http://10.123.8.17:9000',
+    'http://10.123.8.17:90',
+    'http://10.123.8.17:30',
+    'http://10.123.8.17:6379',
 ]
 
 CSRF_TRUSTED_ORIGINS = ['http://10.123.8.17:90']
@@ -104,31 +104,41 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-ASGI_APPLICATION = "backend.asgi.application"
+ASGI_APPLICATION = 'backend.asgi.application'
 
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [('0.0.0.0', 6379)],
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('0.0.0.0', 6379)],
         },
     },
 }
 
 # Get the DB creds from .env file
-DATABASES = {'default': env.db('DMK_URL')}
-
-# External DB data
-DB_CREDS = {
-    'host': env.str('HOST'),
-    'port': env.str('PORT'),
-    'dbname': env.str('DBNAME'),
-    'user': env.str('PGUSER'),
-    'password': env.str('PASSWORD'),
+DATABASES = {
+    'default': {},
+    'dmk': env.db('DMK_URL'),
+    'kis_db': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env.db('KIS_URL')['NAME'],
+        'USER': env.db('KIS_URL')['USER'],
+        'PASSWORD': env.db('KIS_URL')['PASSWORD'],
+        'HOST': env.db('KIS_URL')['HOST'],
+        'PORT': env.db('KIS_URL')['PORT'],
+        'OPTIONS': {
+            'options': '-c search_path=mm,public',
+        },
+        'TEST': {
+            'NAME': 'test_kis_db',
+            'DEPENDENCIES': [],
+        }
+    }
 }
 
-# Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
+DATABASE_ROUTERS = [
+    'data.db_routers.DMKDBRouter'
+]
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -157,7 +167,6 @@ USE_TZ = True
 
 STATIC_ROOT = f'{SITE_ROOT}/backend/static'
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 
 # Default primary key field type
@@ -218,6 +227,7 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': 'redis://0.0.0.0:6379/2',
+        'TIMEOUT': None
     }
 }
 

@@ -5,24 +5,32 @@ import DataContext from '../../DataContext';
 import '../signout_detail_board/signout_table.css';
 
 
-
+const inOarColumns = ['ФИО', '№ ИБ', 'Возраст', 'Лечащий врач', 'Диагноз при поступлении']
 
 const InOARDetailTable = ({ departament }) => {
   const oars = useContext(DataContext).kis;
 
-  let arrived = oars.oar_arrived;
-  arrived = ArrivedOarTable(arrived);
+  let arrived;
+  let filteredData;
 
-    // Отделение реанимации и интенсивной терапии № 1
-    const filteredData = arrived
-        .filter(dict => dict['Отделение'] === departament)
-        .map(({ Отделение, ...rest }) => rest);
-
-  const columns = Object.keys(arrived[0])
-  .filter(key => key !== 'Отделение')
-  .map(key => ({
-    Header: key,
-    accessor: key,
+  if (oars.oar_arrived.length > 0) {
+    arrived = ArrivedOarTable(oars.oar_arrived);
+    filteredData = arrived
+      .sort((a, b) => {
+        if (a['ФИО'] < b['ФИО']) return -1;
+        if (a['ФИО'] > b['ФИО']) return 1;
+        return 0;
+      })
+      .filter(dict => dict['Отделение'] === departament)
+      .map(({ Отделение, ...rest }) => rest);
+  } else {
+    filteredData = [];
+  }
+  
+  const columns = inOarColumns
+      .map(key => ({
+        Header: key,
+        accessor: key,
   }));
 
   // Create a table instance
@@ -34,7 +42,7 @@ const InOARDetailTable = ({ departament }) => {
   return (
     <div className='deads-table-container'>
       <h2 className='detail_block_header'> Детализация по отделению </h2>
-      <table className='deads-table' {...getTableProps()} >
+      <table className='table' {...getTableProps()} >
         <thead>
           {headerGroups.map(headerGroup => (
             <tr {...headerGroup.getHeaderGroupProps()}>

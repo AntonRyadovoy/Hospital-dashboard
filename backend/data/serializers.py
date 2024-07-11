@@ -1,14 +1,27 @@
 """Responsible for serializers."""
 from rest_framework import serializers
-from .models import MainData, AccumulationOfIncoming, Profiles
+from .models import MainData, AccumulationOfIncoming, Profiles, MainDataDetails, ChartPlans
+
+
+class MainDataDetailsSerializer(serializers.ModelSerializer):
+
+    maindata_id = serializers.PrimaryKeyRelatedField(source='maindata',
+                                                     queryset=MainData.objects.all(),
+                                                     write_only=True)
+
+    class Meta:
+        model = MainDataDetails
+        fields = ['maindata_id', 'registered_patients']
 
 
 class MainDataSerializer(serializers.ModelSerializer):
     """Serialize data of MainData model."""
 
+    detailing = MainDataDetailsSerializer(source='maindatadetails', read_only=True)
+
     class Meta:
         model = MainData
-        fields = ['dates', 'arrived', 'hosp', 'refused', 'signout', 'deads', 'reanimation']
+        fields = ['dates', 'arrived', 'hosp', 'refused', 'signout', 'deads', 'reanimation', 'detailing']
 
 
 class ProfilesSerializer(serializers.ModelSerializer):
@@ -20,7 +33,7 @@ class ProfilesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profiles
-        fields = ['id', 'name', 'active', 'current_date', 'fact', 'plan', 'total']
+        fields = ['name', 'active', 'current_date', 'fact', 'plan', 'total']
 
 
 class AccumulativeDataSerializerSave(serializers.ModelSerializer):
@@ -31,6 +44,13 @@ class AccumulativeDataSerializerSave(serializers.ModelSerializer):
         fields = ['id', 'dates', 'number', 'profile_id']
 
 
+class ChartPlansSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ChartPlans
+        fields = ['chart_name', 'plan_value']
+
+
 class KISDataSerializer(serializers.Serializer):
     """
     Serializer for non-model data getting from external DB.
@@ -39,74 +59,46 @@ class KISDataSerializer(serializers.Serializer):
     since it serializes multiple separate datasets from the same DB.
     """
     # Fields of arrived patients.
-    ch103 = serializers.IntegerField(required=False, allow_null=True)
-    clinic_only = serializers.IntegerField(required=False, allow_null=True)
-    ch103_clinic = serializers.IntegerField(required=False, allow_null=True)
-    singly = serializers.IntegerField(required=False, allow_null=True)
-    plan = serializers.IntegerField(required=False, allow_null=True)
+    ch103 = serializers.IntegerField(read_only=True)
+    clinic_only = serializers.IntegerField(read_only=True)
+    ch103_clinic = serializers.IntegerField(read_only=True)
+    singly = serializers.IntegerField(read_only=True)
+    plan = serializers.IntegerField(read_only=True)
 
-    ZL = serializers.IntegerField(required=False, allow_null=True)
-    foreign = serializers.IntegerField(required=False, allow_null=True)
-    nil = serializers.IntegerField(required=False, allow_null=True)
-    nr = serializers.IntegerField(required=False, allow_null=True)
-    dms = serializers.IntegerField(required=False, allow_null=True)
-    undefined = serializers.IntegerField(required=False, allow_null=True)
-    
-    # Fields of hospitalized patients that counted by depts.
-    oar_p =serializers.IntegerField(required=False, allow_null=True)
-    surgery_p =serializers.IntegerField(required=False, allow_null=True)
-    therapy_p =serializers.IntegerField(required=False, allow_null=True)
-    emer1_p =serializers.IntegerField(required=False, allow_null=True)
-    gynekology_p =serializers.IntegerField(required=False, allow_null=True)
-    xray_p =serializers.IntegerField(required=False, allow_null=True)
-    emer2_p =serializers.IntegerField(required=False, allow_null=True)
-    transfusiology_p =serializers.IntegerField(required=False, allow_null=True)
-    gpractice_p =serializers.IntegerField(required=False, allow_null=True)
-    narkology_p =serializers.IntegerField(required=False, allow_null=True)
-    urology_p =serializers.IntegerField(required=False, allow_null=True)
-    lab_p =serializers.IntegerField(required=False, allow_null=True)
-    rean_p =serializers.IntegerField(required=False, allow_null=True)
-    truma_p =serializers.IntegerField(required=False, allow_null=True)
-    neuro_p =serializers.IntegerField(required=False, allow_null=True)
-    ultrasound_p =serializers.IntegerField(required=False, allow_null=True)
-    func_p =serializers.IntegerField(required=False, allow_null=True)
-    cardio_p =serializers.IntegerField(required=False, allow_null=True)
-    endo_p =serializers.IntegerField(required=False, allow_null=True)
-    neurology_p =serializers.IntegerField(required=False, allow_null=True)
-    static_p =serializers.IntegerField(required=False, allow_null=True)
-    epid_p =serializers.IntegerField(required=False, allow_null=True)
-    neon_p =serializers.IntegerField(required=False, allow_null=True)
-    gyst_p =serializers.IntegerField(required=False, allow_null=True)
-    endocop_p =serializers.IntegerField(required=False, allow_null=True)
-    pulmo_p =serializers.IntegerField(required=False, allow_null=True)
+    ZL = serializers.IntegerField(read_only=True)
+    foreign = serializers.IntegerField(read_only=True)
+    nil = serializers.IntegerField(read_only=True)
+    nr = serializers.IntegerField(read_only=True)
+    dms = serializers.IntegerField(read_only=True)
+    undefined = serializers.IntegerField(read_only=True)
     # Fields of deads and signout patients.
-    deads = serializers.IntegerField(required=False, allow_null=True)
-    moved = serializers.IntegerField(required=False, allow_null=True)
-    signout = serializers.IntegerField(required=False, allow_null=True)
+    deads = serializers.IntegerField(read_only=True)
+    moved = serializers.IntegerField(read_only=True)
+    signout = serializers.IntegerField(read_only=True)
 
-    oaronmk_d = serializers.IntegerField(required=False, allow_null=True)
-    surgery_d = serializers.IntegerField(required=False, allow_null=True)
-    oar1_d = serializers.IntegerField(required=False, allow_null=True)
-    dp_d = serializers.IntegerField(required=False, allow_null=True)
-    oar_d = serializers.IntegerField(required=False, allow_null=True)
-    trauma_d = serializers.IntegerField(required=False, allow_null=True)
-    neurosurgery_d = serializers.IntegerField(required=False, allow_null=True)
-    oaroim_d = serializers.IntegerField(required=False, allow_null=True)
-    oar2_d = serializers.IntegerField(required=False, allow_null=True)
-    cardio_d = serializers.IntegerField(required=False, allow_null=True)
-    therapy_d = serializers.IntegerField(required=False, allow_null=True)
-    endo_d = serializers.IntegerField(required=False, allow_null=True)
-    neuroonmk_d = serializers.IntegerField(required=False, allow_null=True)
-    urology_d = serializers.IntegerField(required=False, allow_null=True)
-    pursurgery_d = serializers.IntegerField(required=False, allow_null=True)
-    cardio2_d = serializers.IntegerField(required=False, allow_null=True)
-    skp_d = serializers.IntegerField(required=False, allow_null=True)
-    gynecology_d = serializers.IntegerField(required=False, allow_null=True)
-    emer_d = serializers.IntegerField(required=False, allow_null=True)
-    multi_pay_d = serializers.IntegerField(required=False, allow_null=True)
-    apc_d = serializers.IntegerField(required=False, allow_null=True)
-    combine_d = serializers.IntegerField(required=False, allow_null=True)
-    pulmonology_d = serializers.IntegerField(required=False, allow_null=True)
+    oaronmk_d = serializers.IntegerField(read_only=True)
+    surgery_d = serializers.IntegerField(read_only=True)
+    oar1_d = serializers.IntegerField(read_only=True)
+    dp_d = serializers.IntegerField(read_only=True)
+    oar_d = serializers.IntegerField(read_only=True)
+    trauma_d = serializers.IntegerField(read_only=True)
+    neurosurgery_d = serializers.IntegerField(read_only=True)
+    oaroim_d = serializers.IntegerField(read_only=True)
+    oar2_d = serializers.IntegerField(read_only=True)
+    cardio_d = serializers.IntegerField(read_only=True)
+    therapy_d = serializers.IntegerField(read_only=True)
+    endo_d = serializers.IntegerField(read_only=True)
+    neuroonmk_d = serializers.IntegerField(read_only=True)
+    urology_d = serializers.IntegerField(read_only=True)
+    pursurgery_d = serializers.IntegerField(read_only=True)
+    cardio2_d = serializers.IntegerField(read_only=True)
+    skp_d = serializers.IntegerField(read_only=True)
+    gynecology_d = serializers.IntegerField(read_only=True)
+    emer_d = serializers.IntegerField(read_only=True)
+    multi_pay_d = serializers.IntegerField(read_only=True)
+    apc_d = serializers.IntegerField(read_only=True)
+    combine_d = serializers.IntegerField(read_only=True)
+    pulmonology_d = serializers.IntegerField(read_only=True)
 
     def to_representation(self, instance):
         """
@@ -129,25 +121,57 @@ class KISTableSerializer(KISDataSerializer):
     since it serializes multiple separate table datasets from the same DB.
     """
     # Fields to deads dataset related
-    pat_fio = serializers.CharField(required=False, allow_null=True)
-    ib_num = serializers.CharField(required=False, allow_null=True)
-    sex = serializers.CharField(required=False, allow_null=True)
-    age = serializers.IntegerField(required=False, allow_null=True)
-    arriving_dt = serializers.DateTimeField(required=False, allow_null=True)
-    state = serializers.CharField(required=False, allow_null=True)
-    dept = serializers.CharField(required=False, allow_null=True)
-    days = serializers.IntegerField(required=False, allow_null=True)
-    diag_arr = serializers.CharField(required=False, allow_null=True)
-    diag_dead = serializers.CharField(required=False, allow_null=True)
+    pat_fio = serializers.CharField(read_only=True)
+    ib_num = serializers.CharField(read_only=True)
+    sex = serializers.CharField(read_only=True)
+    age = serializers.IntegerField(read_only=True)
+    arriving_dt = serializers.DateTimeField(read_only=True)
+    state = serializers.CharField(read_only=True)
+    dept = serializers.CharField(read_only=True)
+    days = serializers.IntegerField(read_only=True)
+    diag_arr = serializers.CharField(read_only=True)
+    diag_dead = serializers.CharField(read_only=True)
     # Fields to hospitalized in reanimation dataset related
-    # ages = serializers.IntegerField(required=False, allow_null=True)
-    doc_fio = serializers.CharField(required=False, allow_null=True)
-    diag_start = serializers.CharField(required=False, allow_null=True)
+    doc_fio = serializers.CharField(read_only=True)
+    diag_start = serializers.CharField(read_only=True)
     # Fields to moved to reanimation dataset related
-    move_date = serializers.DateTimeField(required=False, allow_null=True)
-    from_dept = serializers.CharField(required=False, allow_null=True)
-    # Fields to deads from reanimation dataset related
+    move_date = serializers.DateTimeField(read_only=True)
+    from_dept = serializers.CharField(read_only=True)
 
 
+class EmergencyDataSerializer(KISTableSerializer):
+
+    refuses_amount = serializers.IntegerField(read_only=True)
 
 
+class EmergencyDetailDataSerializer(EmergencyDataSerializer, KISTableSerializer):
+
+    diag = serializers.CharField(read_only=True)
+    refuse_reason = serializers.CharField(read_only=True)
+    refuse_date = serializers.DateTimeField(read_only=True)
+    waiting_time = serializers.TimeField(read_only=True)
+
+
+class PlanHospSerializer(serializers.Serializer):
+
+    dept = serializers.CharField(read_only=True)
+    mon = serializers.IntegerField(read_only=True)
+    tue = serializers.IntegerField(read_only=True)
+    wed = serializers.IntegerField(read_only=True)
+    thu = serializers.IntegerField(read_only=True)
+    fri = serializers.IntegerField(read_only=True)
+    sat = serializers.IntegerField(read_only=True)
+    sun = serializers.IntegerField(read_only=True)
+    other = serializers.IntegerField(read_only=True)
+
+    def __init__(self, *args, **kwargs):
+        current_day = kwargs.pop('day', None)
+        super().__init__(*args, **kwargs)
+
+
+        week_days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        current_day_ind = week_days.index(current_day)
+        ordered_week = week_days[current_day_ind:] + week_days[:current_day_ind]
+        ordered_fields = ['dept'] + ordered_week + ['other']
+
+        self.fields = {field: self.fields[field] for field in ordered_fields}

@@ -8,19 +8,34 @@ import DataContext from '../DataContext';
 import GetWeekDays from '../dates/DatesFormat';
 import { mapArrivedValues } from '../Feauters';
 import { extractProperties } from '../Feauters';
+import { extractDetailsProperties } from '../Feauters';
 import { GetDates } from '../dates/DatesFormat';
 import "./arrived_chart.css";
 
+
+const plugin = {
+
+  id: "increase-legend-spacing",
+  beforeInit(chart: any) {
+    // Get reference to the original fit function
+    const originalFit = chart.legend.fit;
+
+    // Override the fit function
+    chart.legend.fit = function fit() {
+      // Call original function and bind scope in order to use `this` correctly inside it
+      originalFit.bind(chart.legend)();
+      // Change the height as suggested in another answers
+      this.height += 35;
+    }
+  }
+};
+Chart.register(plugin);
 Chart.register(AnnotationPlugin);
 Chart.register(ChartDataLabels);
 
 
-Chart.defaults.font.size = 12;
-Chart.defaults.color = '#090b1f';  
-
-
 const ArrivedChart = () => {
-    
+
     const navigate = useNavigate();
     const handleClick = (event, chartElements) => {
       if (chartElements.length > 0) {
@@ -31,92 +46,63 @@ const ArrivedChart = () => {
       }
     };
 
+    let arrivedPlanValue = 100;
+    let mainData = sessionStorage.getItem('main_data');
+    mainData = JSON.parse(mainData);
+    if (mainData.dmk.plans_dmk.length !== 0) {
+      arrivedPlanValue = mainData.dmk.plans_dmk[0].plan_value
+    }
 
-    const planValue = 120;
+    const dmkData = useContext(DataContext).dmk
+    const dmk_charts = dmkData.main_dmk;
+    const mainPairValues = extractProperties(dmk_charts, 'arrived');
+    const detailsPairValues = extractDetailsProperties(dmk_charts, 'detailing')
 
-    const dmk_charts = useContext(DataContext).dmk.main_dmk;
-    const pairValues = extractProperties(dmk_charts, 'arrived');
-    const mappedData = mapArrivedValues(pairValues, GetDates(), 'arrived');
+    const mappedMainData = mapArrivedValues(mainPairValues, GetDates(), 'arrived');
+    const mappedDetailsData = mapArrivedValues(detailsPairValues, GetDates(), 'detailing');
+    const otherPatients = mappedMainData.map((num, index) => num - mappedDetailsData[index]);
 
     const mappedWeek = GetWeekDays();
     const barOptions = GetDates();
+
+    let dynamicPadding = 0;
+    if (mappedDetailsData.every(value => value >= 8)) {
+      if (mappedDetailsData.every(value => value >= 4)) {
+        dynamicPadding = 20;
+      } else {dynamicPadding = 14;}
+      dynamicPadding = 0;
+    }
 
     const dataWithDates = mappedWeek.map((weekDay, index) => ({
       label: weekDay,
       date: barOptions[index]
     }));
-    
+
+
     const arrived_data = {
         labels: mappedWeek,
         datasets: [
             {
-              label: 'total',
-              data: mappedData,
-              backgroundColor: ['#212e93b3'],
-              borderColor: '#090b1f',
-              borderWidth: 1,
-              srtDates: dataWithDates
-            },
-        ],
-    };
-
-    const chartOptions = {
-        barThickness: 'flex',
-        barPercentage: 0.9, 
-        categoryPercentage: 0.9,
-        scales: {
-            x: {
-                grid: { 
-                  drawOnChartArea: false,
-                  drawTicks: false
-                },
-                ticks: {
-                    beginAtZero: true,
-                    color: '#090b1f',   
-                },
-            },
-            y: {
-                grid: {
-                  drawOnChartArea: true,
-                  drawTicks: false
-                  },
-             
-                ticks: {
-                    color: (context) => {
-                        if (context.tick.value === planValue) {
-                            return '#860000'; // Customize the color of the custom grid lines
-                        } else {
-                            return '#090b1f'; // Default tick color
-                        }
-                    },
-                    callback: (value, index, values) => {
-                        // Customize the tick value
-                        if (value === planValue) {
-                            return `план ${planValue}`; // Change the tick label for the value 60
-                        } else {
-                            return value; // Use the default tick label for other values
-                        }
-                    },
-                    font: {weight: 'bold'},
-                },
-            },
-        },
-        plugins: { 
-            datalabels: {
+              label: 'ЗЛ',
+              data: mappedDetailsData,
+              backgroundColor: ['#647fda'],
+              srtDates: dataWithDates,
+              datalabels: {
                 display: true,
                 labels: {
                     title: {
-                        color: 'black',
+                        color: '#001a3f',
                         font: {
-                          size: 13,
+                          size: 25,
+                          family:'nbold'
                           },
-                        anchor: 'end',
-                        align: 'end',
+                        // anchor: 'start',
+                        align: 'center',
                           formatter: (title, context) => {
                             if (context.dataset.data[context.dataIndex] === null) {
-                              return 'N/A';
+                              return 'Н/Д';
                             }
-                            return title; // Use the default title if the value is not null
+                            return title;
                           },
                     },
                     value: {
@@ -124,50 +110,137 @@ const ArrivedChart = () => {
                             if (context.dataset.data[context.dataIndex] === null) {
                                 return '';
                             }
-                            const percernts = ((title / planValue  * 100) - 100).toFixed(1);
-                            const color = percernts < 0 ? '#b200ac' : 'blue';
+                            const percernts = (title / arrivedPlanValue  * 100).toFixed(1);
 
                             return '\t' + percernts+'%';
                         },
+                        // anchor: 'center',
+                        align: 'start',
+                        padding: 8,
                         font: {
-                          size: 12,
+                          size: 19,
                           weight: 'bold',
+                          family: 'nbold'
                           },
                         color: (context) => {
                           const value = context.dataset.data[context.dataIndex];
-                          const percent = ((value / planValue) * 100 - 100).toFixed(1);
-  
-                          return percent < 0 ? '#b200ac' : '#00a318';
+                          const percent = ((value / arrivedPlanValue) * 100).toFixed(1);
+
+                          return percent < 100 ? '#e9306a' : '#25c445';
                         },
                     },
                 },
 
             },
+            },
+            {
+              label: 'Всего',
+              data: otherPatients,
+              backgroundColor: ['#1a2a56'],
+              srtDates: dataWithDates,
+              datalabels: {
+                display: true,
+                labels: {
+                    title: {
+                        color: '#001a3f',
+                        font: {
+                          size: 25,
+                          family:'nbold'
+                          },
+                        anchor: 'end',
+                        align: 'end',
+                        formatter: (title, context) => {
+                          if (context.dataset.data[context.dataIndex] === null) {
+                              return 'Н/Д';
+                          }
+                          // Use value from mappedMainData
+                          const mainDataValue = mappedMainData[context.dataIndex];
+                          return mainDataValue;
+                      },
+                    },
+                },
+            },
+            },
+        ],
+    };
 
+    const chartOptions = {
+        barThickness: 'flex',
+        barPercentage: 0.9,
+        categoryPercentage: 0.9,
+        scales: {
+            x: {
+                stacked: true,
+                grid: {
+                  drawOnChartArea: false,
+                  drawTicks: true
+                },
+                ticks: {
+                    padding: dynamicPadding,
+                    beginAtZero: true,
+                    color: '#090b1f',
+                    font: {
+                        weight: 'bold',
+                        family: 'nbold',
+                    }
+                },
+            },
+            y: {
+                stacked: true,
+                grid: {
+                  drawOnChartArea: true,
+                  drawTicks: true,
+                },
+                ticks: {
+                    color: (context) => {
+                        if (context.tick.value === arrivedPlanValue) {
+                            return '#860000';
+                        } else {
+                            return '#001a3f';
+                        }
+                    },
+                    callback: (value, index, values) => {
+                        if (value === arrivedPlanValue) {
+                            return `план ${arrivedPlanValue}`;
+                        } else {
+                            return value;
+                        }
+                    },
+                    font: {
+                        weight: 'bold',
+                        family: 'nbold',
+                        size: 20
+                    },
+                },
+            },
+        },
+        plugins: {
             annotation: {
                     annotations: {
                       line1: {
                         type: 'line',
-                        yMin: planValue,
-                        yMax: planValue,
-                        borderColor: '#ff6384',
-                        borderWidth: 1.5,
+                        yMin: arrivedPlanValue,
+                        yMax: arrivedPlanValue,
+                        borderColor: '#e9306a',
+                        borderWidth: 2,
                       },
                     },
               },
             legend: {
-                display: false,
+                display: true,
             },
             title: {
                 display: true,
                 text: 'Динамика обращений за неделю',
-                color: '#090b1f',
+                color: '#001a3f',
                 font: {
-                    size: 13,
-            },                
-            padding: {
-              bottom: 30,
-            }
+                    size: 30,
+                    family: 'nbold'
+
+                },
+                padding: {
+                  bottom: 0,
+                }
             },
         },
         onClick: handleClick

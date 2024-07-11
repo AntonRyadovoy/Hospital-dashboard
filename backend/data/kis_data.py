@@ -1,27 +1,36 @@
 """Responsible for classes defining non-model query-sets from another DB."""
 import logging
 from typing import Generator, Any, Union
-from datetime import date
+from datetime import date, timedelta
 from collections import Counter
 from itertools import chain
 from rest_framework.exceptions import ValidationError
-from rest_framework.response import Response
-from django.conf import settings
 from django.db.utils import IntegrityError
 from django.db.models import Sum
+from django.db import connections
 from .psycopg_module import BaseConnectionDB
-from .sql_queries import QuerySets
+from .sql_queries import QuerySets, EmergencyQueries, PlanHospitalizationQueries
+from .models import Profiles, MainData, AccumulationOfIncoming, MainDataDetails
 from .serializers import (
-     KISDataSerializer,
-     KISTableSerializer,
-     MainDataSerializer,
-     AccumulativeDataSerializerSave,
-     ProfilesSerializer)
-from .models import Profiles, MainData, AccumulationOfIncoming
+    KISDataSerializer,
+    KISTableSerializer,
+    MainDataSerializer,
+    MainDataDetailsSerializer,
+    AccumulativeDataSerializerSave,
+    ProfilesSerializer,
+    EmergencyDataSerializer,
+    EmergencyDetailDataSerializer,
+    PlanHospSerializer
+)
 
-creds = settings.DB_CREDS
 logger = logging.getLogger('data.kis_data.DataForDMK')
 today = date.today
+
+
+def dates_period(days_amount):
+    period = [str(today() - timedelta(days=days)) for days in range(days_amount)]
+    period.reverse()
+    return period
 
 
 class CleanData:
@@ -70,11 +79,12 @@ class KISData:
         :param query_sets: *list*: A list containing the data queries
          and queries of its columns. Each query pair is a list.
         """
+        self.con = connections.settings['kis_db']
         self.query_sets = query_sets
-        self.db_conn = BaseConnectionDB(dbname=creds['dbname'],
-                                        host=creds['host'],
-                                        user=creds['user'],
-                                        password=creds['password']
+        self.db_conn = BaseConnectionDB(dbname=self.con['NAME'],
+                                        host=self.con['HOST'],
+                                        user=self.con['USER'],
+                                        password=self.con['PASSWORD']
                                         )
         self.cursor = self.db_conn.execute_query
 
@@ -109,7 +119,7 @@ class DataProcessing:
 
     qs = QuerySets
 
-    def __init__(self, kisdata_obj):
+    def __init__(self, kisdata_obj: KISData):
         """
         Initialize the DataProcessing instance.
 
@@ -118,64 +128,52 @@ class DataProcessing:
         self.kisdata_obj = kisdata_obj
 
     @staticmethod
-    def filter_dataset(dataset, ind, value) -> list:
+    def filter_dataset(dataset: list[tuple], ind: int, value: Union[int, str, Any]) -> list:
         """
         Filter passed dataset based on index and value.
 
-        :param dataset: *list*: The dataset to filter.
-        :type dataset: list[tuple]
-        :param ind: *int*: Index to filter on.
-        :type ind: int
-        :param value: *int, str*: Value to match in the filter.
-        :type value: int or str
-        :return: *list*: Filtered dataset.
+        :param dataset: list: The dataset to filter.
+        :param ind: int: Index to filter on.
+        :param value: int, str: Value to match in the filter.
+        :return: list: Filtered dataset.
         """
         return [row for row in dataset if row[ind] == value]
 
     @staticmethod
-    def count_dataset_total(dataset):
+    def count_dataset_total(dataset: list[tuple]) -> int:
         """
         Count the total number of rows in the dataset.
 
-        :param dataset: *list*: The dataset to count.
-        :type dataset: list[tuple]
-        :return: *int*: Total number of rows.
-
+        :param dataset: list: The dataset to count.
+        :return: int: Total number of rows.
         """
         return len(dataset)
 
     @staticmethod
-    def slice_dataset(dataset, mapping) -> list[list]:
+    def slice_dataset(dataset: list[tuple], mapping: dict) -> list[list]:
         """
         Gather all the split lines into one to separate it into data and fields.
 
-        :param dataset: *list*: Dataset for processing.
-        :type dataset: list[tuple]
-        :param mapping: *dict*: Dictionary for matching Russian column names and English ones.
-        :type mapping: dict[str, str]
-        :return: *list*: List of list - first it is column names, second is calculated amount of patients.
+        :param dataset: list: Dataset for processing.
+        :param mapping: dict: Dictionary for matching Russian column names and English ones.
+        :return: list: List of list - first it is column names, second is calculated amount of patients.
         """
-        # Creating 1 row inside dataset instead many.
         stacked_tuples_dataset = [tuple(chain.from_iterable(map(tuple, dataset)))]
-        # Getting column names from stacked tuple of KIS data.
         ru_columns = list(stacked_tuples_dataset[0][::2])
-        # Creating en columns for matching to KIS serializer fields.
         en_columns = [mapping[column] for column in ru_columns]
-        # Created dataset manually as list.
         counted_pats = list(stacked_tuples_dataset[0][1::2])
         return [en_columns, counted_pats]
 
     @staticmethod
-    def create_instance(columns, dataset) -> list[CleanData]:
+    def create_instance(columns: list, dataset: list[tuple]) -> list[CleanData]:
         """
         Create instances of a target class with data retrieved from the database.
 
-        :param columns: *list*: A list of column names representing the attributes of the `CleanData` instances.
-        :type columns: list[str]
-        :param dataset: *list*: A list of lists, where each inner list contains
+        :param columns: list: A list of column names representing the attributes of the `CleanData` instances.
+        :param dataset: list: A list of lists, where each inner list contains
          data corresponding to a row in the database.
-        :type dataset: list[tuple]
-        :return: *list[CleanData]*: A list of `CleanData` class instances, each instantiated with data from the provided dataset.
+        :return: list[CleanData]: A list of `CleanData` class instances,
+         each instantiated with data from the provided dataset.
         """
         instances_list = [CleanData(**dict(zip(columns, row))) for row in dataset]
         return instances_list
@@ -206,6 +204,7 @@ class DataForDMK(DataProcessing):
 
     qs = QuerySets
     dmk_cols = qs.DMK_COLUMNS
+    details_cols = qs.DMK_DETAILS_COLUMNS
 
     def __init__(self, kisdata_obj):
         """
@@ -237,15 +236,27 @@ class DataForDMK(DataProcessing):
             return [total_amount, positive_amount]
         return [total_amount, positive_amount, negative_amount]
 
-    def get_arrived_data(self, arrived_dataset) -> dict:
+    def get_arrived_data(self, arrived_dataset) -> tuple:
         """
-        Get data related to arrivals, hosp and refused patients.
+        Get main data related to arrivals, hosp and refused patients and their details.
 
-        :return: *dict*: Dictionary containing arrived, hospitalized, and refused data.
+        :param arrived_dataset: *list*: The dataset to count.
         """
-        result_keys = self.dmk_cols[0:3]
-        ready_values = self.count_data(arrived_dataset, 0, 1)
-        return dict(zip(result_keys, ready_values))
+        registered_pats = self.filter_dataset(arrived_dataset, 3, 'ЗЛ')
+        registered_pats_amount = self.count_dataset_total(registered_pats)
+        details_dict = {'registered_patients': registered_pats_amount}
+
+        def get_main_arrived(dataset=arrived_dataset) -> dict:
+            """
+            Get main data related to arrivals, hosp and refused patients.
+
+            :return: *dict*: Dictionary containing arrived, hospitalized, and refused data.
+            """
+            result_keys = self.dmk_cols[0:3]
+            ready_values = self.count_data(dataset, 0, 1)
+            main_arrived = dict(zip(result_keys, ready_values))
+            return main_arrived
+        return get_main_arrived, details_dict
 
     def get_signout_data(self, signout_dataset) -> dict:
         """
@@ -268,28 +279,31 @@ class DataForDMK(DataProcessing):
         return {self.dmk_cols[-1]: self.count_dataset_total(reanimation_dataset)}
 
     @staticmethod
-    def get_dept_hosps(dh_dataset: list[tuple]) -> list[dict[str, Union[int, str]]]:
+    def get_dept_hosps(dh_dataset: list[tuple], raw_rtype: bool = False) \
+            -> Union[list[dict[str, Union[int, str]]], list[tuple]]:
         """
         Get data related to hospitalized by depts patients.
 
         :param dh_dataset: Raw dataset from db.
+        :param raw_rtype: Feature that allow get result in a raw list of tuples format
+         for inserting data to db directly when needed.
         :return:
         """
+        if raw_rtype:
+            return dh_dataset
         profiles_queryset = Profiles.objects.filter(active=True)
-        profiles = [{profile.name: profile.id} for profile in profiles_queryset]
-        # Here we are checking profile name from each row given dataset so that it accords
-        # profiles added into Profiles model and get list of ready to serializing dicts.
-        result_dicts = [{'number': row[1], 'profile_id': o.get(row[0])}
-                        for row in dh_dataset for o in profiles if o.get(row[0]) is not None]
-        result = []
+        # Creating dict with dept names and ids.
+        profiles = [profile.profile_id for profile in profiles_queryset]
+        # Create list and filling it separated resulting dicts mapping with current active profiles.
+        result_dicts = []
         for row in dh_dataset:
-            for o in profiles:
-                if o.get(row[0]) is not None:
-                    result.append({'number': row[1], 'profile_id': o.get(row[0])})
-
+            profile_id = row[0]
+            number = row[1]
+            if profile_id in profiles:
+                result_dicts.append({'profile_id': profile_id, 'number': number})
         return result_dicts
 
-    def __collect_data(self, chosen_date: Union[date, None]) -> dict[str, dict]:
+    def collect_data(self, chosen_date: Union[date, None]) -> dict[str, dict]:
         """
         Get calculated main values for detail boards on the front-end for saving to DMK DB.
 
@@ -304,19 +318,25 @@ class DataForDMK(DataProcessing):
         """
         if self.kisdata_obj.db_conn.conn is None:
             main_data = {i: None for i in self.dmk_cols}
+            details_arrived = {i: None for i in self.details_cols}
+            dh_dataset = None
         else:
             gen = self.kisdata_obj.get_data_generator()
-            arrived = self.get_arrived_data(next(gen))
+            main_arrived_func, details_arrived = self.get_arrived_data(next(gen))
+            main_arrived = main_arrived_func()
             signout = self.get_signout_data(next(gen))
             deads = self.get_reanimation_data(next(gen))
             dh_dataset = self.get_dept_hosps(next(gen))
-            main_data = arrived | signout | deads
+            main_data = main_arrived | signout | deads
         # Add dates key-value pair to collected data dict.
         today_dict = {'dates': today()}
         if chosen_date is not None:
             today_dict = {'dates': chosen_date}
         ready_main_data = today_dict | main_data
-        return {'main_data': ready_main_data, 'accum_data': dh_dataset}
+        result_dict = {'main_data': ready_main_data,
+                       'main_details_data': details_arrived,
+                       'accum_data': dh_dataset}
+        return result_dict
 
     @staticmethod
     def __check_data(data: list[dict]) -> None:
@@ -354,7 +374,7 @@ class DataForDMK(DataProcessing):
                                         )
         return err_text
 
-    def save_to_dmk(self, chosen_date: date = None) -> list[Union[MainData, None], AccumulationOfIncoming]:
+    def save_to_dmk(self, chosen_date: str = None) -> list[Union[Union[MainData, None], AccumulationOfIncoming]]:
         """
         Save the prepared data to the DMK DB using the MainData model and its serializer.
 
@@ -365,15 +385,18 @@ class DataForDMK(DataProcessing):
         :raises SyntaxError: If there is a syntax error in the serializer.
         :raises AssertionError: If there is an assertion error during saving.
 
-        :return: List containing one MainData instance or None as a first list element and list of AccumulatedData instances
-         as a second element. If any error occurs - it write the logs to log-file.
+        :return: List containing one MainData instance or None as a first list element
+         and list of AccumulatedData instances as a second element.
+         If any error occurs - it write the logs to log-file.
         """
-        common_dict = self.__collect_data(chosen_date)
+        common_dict = self.collect_data(chosen_date)
         main = common_dict['main_data']
         accum = common_dict['accum_data']
+        main_details = common_dict['main_details_data']
         main_res = self.save_main(main)
+        main_details_res = self.save_details_data(main_details)
         accum_res = self.save_accumulated(accum)
-        return [main_res, accum_res]
+        return [main_res, main_details_res, accum_res]
 
     def save_main(self, main_data: dict) -> Union[MainData, None]:
         """
@@ -386,13 +409,28 @@ class DataForDMK(DataProcessing):
         main_sr = MainDataSerializer(data=main_data)
         try:
             main_sr.is_valid(raise_exception=True)
-            main_sr.save()
-            return main_sr.save()
+            saved_instance = main_sr.save()
+            return saved_instance
         except (ValidationError, SyntaxError, AssertionError, IntegrityError) as e:
             en_error = self.__translate(e)
             logger.error(en_error)
 
-    def save_accumulated(self, accum_data: dict) -> list[Union[MainData, Any], list[AccumulationOfIncoming]]:
+    def save_details_data(self, details_data: dict) -> Union[MainDataDetails, None]:
+        last_maindata = MainData.objects.last()
+        maindata_id = last_maindata.id
+        details_data.update({'maindata_id': maindata_id})
+        main_details_sr = MainDataDetailsSerializer(data=details_data)
+        try:
+            main_details_sr.is_valid(raise_exception=True)
+            saved_instance = main_details_sr.save()
+            return saved_instance
+        except (ValidationError, SyntaxError, AssertionError, IntegrityError) as e:
+            en_error = self.__translate(e)
+            logger.error(en_error)
+
+    @staticmethod
+    def save_accumulated(accum_data: dict) \
+            -> Union[list, list[Union[MainData, Any], list[AccumulationOfIncoming]]]:
         """
         Iterate through given Serializer and save a few new model instances.
 
@@ -410,7 +448,6 @@ class DataForDMK(DataProcessing):
                 accum_sr.save()
                 saved_instances.append(accum_sr.save())
             except (ValidationError, SyntaxError, AssertionError, IntegrityError) as e:
-                print(e)
                 logger.error(e)
         return saved_instances
 
@@ -444,9 +481,6 @@ class KISDataProcessing(DataProcessing):
       - create_ready_dicts() -> list[dict]: Create a list of dictionaries containing processed and serialized datasets.
     """
 
-    deads_oar = []
-    counted_oar = []
-
     def __init__(self, kisdata_obj: KISData):
         """
         Initialize the KISDataProcessing instance.
@@ -454,6 +488,8 @@ class KISDataProcessing(DataProcessing):
         :param kisdata_obj: The `KISData` instance.
         """
         super().__init__(kisdata_obj)
+        self.deads_oar = []
+        self.counted_oar = []
 
     def __count_values(self, dataset: list[tuple], ind: int, keywords: list[str]) -> list[int]:
         """
@@ -502,15 +538,10 @@ class KISDataProcessing(DataProcessing):
         :param arrived_dataset: Dataset from DB as a list of tuples.
         :return: Serialized data.
         """
-        # Defining columns for serializer and values for filtering datasets.
         columns, channels, statuses = self.qs.COLUMNS['arrived'], self.qs.channels, self.qs.statuses
-        # Getting first dataset by generator.
         hosp_data = self.filter_dataset(arrived_dataset, 0, 1)
-        # Calculating channels numbers.
         sorted_channels_datasets = self.__count_values(hosp_data, 2, channels)
-        # Calculating patients statuses.
         sorted_statuses_datasets = self.__count_values(hosp_data, -1, statuses)
-        # Creating 1 row data in dataset.
         summary_dataset = [tuple(sorted_channels_datasets+sorted_statuses_datasets)]
         ready_dataset = self.__result_for_sr(columns, summary_dataset)
         return self.__serialize(ready_dataset)
@@ -560,8 +591,6 @@ class KISDataProcessing(DataProcessing):
                              for oar in self.qs.oar_depts]: 
             self.deads_oar = [tuple(oars_filtered)]
         return summary_dict
-    
-
 
     def oar_process(self, dataset: list[tuple], columns: list[str]) -> dict[str, Any]:
         """
@@ -596,7 +625,7 @@ class KISDataProcessing(DataProcessing):
                   ]
         return result
 
-    def create_ready_dicts(self) -> list[dict]:
+    def create_ready_dicts(self) -> Union[list, dict]:
         """
         Create an ordered list of dictionaries containing processed and serialized datasets.
 
@@ -619,8 +648,6 @@ class KISDataProcessing(DataProcessing):
         oar_moved = self.oar_process(next(gen), self.qs.COLUMNS['oar_moved_t'])
         oar_current = self.oar_process(next(gen), self.qs.COLUMNS['oar_current_t'])
         oar_numbers = self.oar_count()
-        self.counted_oar.clear()
-        self.deads_oar.clear()
         # Creating list of ready processed datasets.
         oar_deads = deads.get('oar_deads')
         common_deads = deads.get('deads')
@@ -629,40 +656,101 @@ class KISDataProcessing(DataProcessing):
         result = dict(zip(keywords, ready_dataset))
         return result
 
+    @staticmethod
+    def get_week_kis_data(query: str, kind: str):
+        last_week = dates_period(7)
+        kis = KISDataProcessing
+        ready_queries = [QuerySets.chosen_date_query(query, day)[0] for day in last_week]
+        processing = kis(KISData([query])).arrived_process if kind == 'arrived'\
+            else kis(KISData([query])).signout_process
+        generator = KISData(ready_queries).get_data_generator()
+        result = {f'{kind}_{day}': processing(next(generator)) for day in last_week}
+        return result
 
-def collect_model() -> dict:
-    """Create postgres view contains all needed data of month plans table and return serialized data."""
-    data = Profiles.objects \
-        .select_related() \
-        .annotate(total=Sum('accumulationofincoming__number')) \
-        .values('name', 'total', 'plannumbers__plan').filter(active=True)   
-    accum_sr = ProfilesSerializer(data, many=True)
-    return accum_sr.data
+
+class EmergencyDataProcessing(DataProcessing):
+
+    eq = EmergencyQueries
+
+    def __init__(self, kisdata_obj):
+        super().__init__(kisdata_obj)
+        self.doc_names = None
+
+    def get_waitings_patients(self, dataset: list[tuple]):
+        columns = self.eq.COLUMNS['waitings']
+        cleaned_dataset = self.create_instance(columns, dataset)
+        sr_data = EmergencyDetailDataSerializer(cleaned_dataset, many=True).data
+        return sr_data
+
+    def get_total_refuses(self, dataset: list[tuple]):
+        self.doc_names = [name[0] for name in dataset]
+        columns = self.eq.COLUMNS['total_refuse']
+        cleaned_dataset = self.create_instance(columns, dataset)
+        sr_data = EmergencyDataSerializer(cleaned_dataset, many=True).data
+        return sr_data
+
+    def get_detailed_refuses(self):
+        detail_refuse_query = self.eq().get_detail_refuse_query(self.doc_names)
+        self.kisdata_obj = KISData(detail_refuse_query)
+        gen = self.kisdata_obj.get_data_generator()
+        columns = self.eq.COLUMNS['detail_refuse']
+        cleaned_datasets = [self.create_instance(columns, dataset) for dataset in gen]
+        sr_data_list = [EmergencyDetailDataSerializer(obj, many=True).data for obj in cleaned_datasets]
+        return sr_data_list
+
+    def get_results(self):
+        gen = self.kisdata_obj.get_data_generator()
+        waitings = self.get_waitings_patients(next(gen))
+        total_refuses = self.get_total_refuses(next(gen))
+        detail_refuses = self.get_detailed_refuses()
+        result = {'waitings': waitings, 'total_refuses': total_refuses, 'detail_refuses': detail_refuses}
+        return result
 
 
-def get_chosen_date(kind: Union[str, None], dates: Union[str, None]) -> Union[dict, None]:
-    """
-    Make hit to KIS DB for getting chosen date details data and return serialized data.
+class PlanHospitalizationDataProcessing(DataProcessing):
 
-    :param kind: Part of URL-params that is responsible for the type of details data.
-     None If URL-params not passed by default.
-    :param dates: Part of URL-params that is responsible for the date of details data.
-     None If URL-params not passed by default.
-    :return: Dict of serialized data if URL-params passed, otherwise None.
-    """
-    queries = QuerySets()
-    gen = KISData
-    kis = KISDataProcessing
+    ph = PlanHospitalizationQueries
 
-    if kind == 'arrived':
-        query = queries.ARRIVED
-        processing = kis(1).arrived_process
-    elif kind == 'signout':
-        query = queries.SIGNOUT
-        processing = kis(1).signout_process
-    else:
-        return
-    kisdata_obj = gen(queries.chosen_date_query(query, dates))
-    dataset = next(kisdata_obj.get_data_generator())
-    result = processing(dataset)
-    return result
+    def __init__(self, kisdata_obj):
+        super().__init__(kisdata_obj)
+
+    def get_plan_hosp(self, dataset: list[tuple]):
+            dates = sorted(set(obj[1] for obj in dataset if obj[0] == 1))
+            columns = tuple(['dept'] + [i.strftime('%a').lower() for i in dates] + ['other'])
+            depts = set(obj[2] for obj in dataset)
+            depts_dict = {dept: [] for dept in depts}
+    
+            for date in dates:
+                for dept in depts:
+                    entry = next((item[3] for item in dataset if item[1] == date and item[2] == dept), 0)
+                    depts_dict[dept].append(entry)
+    
+            for dept in depts:
+                depts_dict[dept] += [item[3] for item in dataset if item[1] is None and item[2] == dept] or [0]
+    
+            ready_to_clean_data = [tuple([i, *k]) for i, k in depts_dict.items()]
+            cleaned_dataset = self.create_instance(columns, ready_to_clean_data)
+            sr_data = PlanHospSerializer(cleaned_dataset, many=True, day=columns[1]).data
+            return sr_data
+
+    def get_results(self) -> dict:
+        gen = self.kisdata_obj.get_data_generator()
+        plan_hosp = self.get_plan_hosp(next(gen))
+        result = plan_hosp
+        return result
+
+
+class DMKManager:
+
+    @staticmethod
+    def collect_model() -> dict:
+        """Create postgres view contains all needed data of month plans table and return serialized data."""
+        data = Profiles.objects \
+            .select_related() \
+            .annotate(total=Sum('accumulationofincoming__number')) \
+            .values('name', 'total', 'plannumbers__plan') \
+            .filter(active=True) \
+            .filter(plannumbers__isnull=False)
+        accum_sr = ProfilesSerializer(data, many=True)
+        return accum_sr.data
+

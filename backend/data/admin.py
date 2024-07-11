@@ -1,9 +1,11 @@
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-from django.core.cache import cache
+from django.contrib import messages
+from django.urls import reverse
 from django.contrib import admin
-from .models import Profiles, PlanNumbers
+from django.shortcuts import redirect
+from .models import Profiles, PlanNumbers, ChartPlans
 from .caching import Cacher
+from .consumers import trigger_notification
+from .forms import KISProfileChosingForm
 from django_celery_beat.models import (
     IntervalSchedule,
     CrontabSchedule,
@@ -21,39 +23,85 @@ admin.site.unregister(CrontabSchedule)
 
 class ProfilesAdmin(admin.ModelAdmin):
 
+    # change_list_template = 'data/admin/change_list.html'
+    change_form_template = 'data/admin/change_form.html'
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'active'),
+        }),
+    )
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        """Pass custom ModelForm of external model."""
+        extra_context = extra_context or {}
+        extra_context['kis_profiles'] = KISProfileChosingForm()
+        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+
+    def add_view(self, request, form_url="", extra_context=None):
+        """Pass custom ModelForm of external model."""
+        extra_context = extra_context or {}
+        extra_context['kis_profiles'] = KISProfileChosingForm()
+        return super().add_view(request, form_url, extra_context=extra_context)
+
     def save_model(self, request, obj, form, change) -> None:
-        """Override method so that perform renewing data in cache."""
+        """Override method so that perform renewing data in cache and re-render responsible react component."""
+        obj_id, obj_name = request.POST.get('id'), request.POST.get('name')
+        change_url = reverse('admin:data_profiles_change', args=(obj_id,))
+        method_type = request.path.split('/')[-2]
+        existing_profiles = Profiles.objects.all()
+        profiles_ids = [profile.profile_id for profile in existing_profiles]
+        try:
+            obj_id = int(obj_id)
+        except ValueError:
+            self.send_message(request, obj_id)
+            return redirect(change_url)
+        if method_type == 'add':
+            if obj_id in profiles_ids:
+                self.send_message(request, obj_id)
+                return redirect(change_url)
+            obj.profile_id = obj_id
+        elif method_type == 'change':
+            obj.name = obj_name
         super().save_model(request, obj, form, change)
-        profile_plan, created = PlanNumbers.objects.get_or_create(profile=obj, defaults={'active': obj.active,
-                                                                                         'plan': 0})
-        cache.delete('dmk')
+        PlanNumbers.objects.get_or_create(profile=obj, defaults={'profile': obj, 'plan': 0})
         Cacher().dmk_cache()
         trigger_notification()
+
+    def delete_model(self, request, obj) -> None:
+        super().delete_model(request, obj)
+        Cacher().dmk_cache()
+        trigger_notification()
+
+    @staticmethod
+    def send_message(request, obj_id):
+        message = messages.error(request, f"A profile with ID {obj_id} already exists.")
+        return message
 
 
 class PlanNumbersAdmin(admin.ModelAdmin):
 
-    change_list_template = 'data/admin/change_list.html'
+    def save_model(self, request, obj, form, change) -> None:
+        """Override method so that perform renewing data in cache and re-render responsible react component."""
+        super().save_model(request, obj, form, change)
+        Cacher().dmk_cache()
+        trigger_notification()
+
+    def delete_model(self, request, obj) -> None:
+        super().delete_model(request, obj)
+        Cacher().dmk_cache()
+        trigger_notification()
+
+
+class ChartPlansAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change) -> None:
-        """Override method so that perform renewing data in cache."""
+        """Override method so that perform renewing data in cache and re-render responsible react component."""
         super().save_model(request, obj, form, change)
-        cache.delete('dmk')
         Cacher().dmk_cache()
         trigger_notification()
 
 
 admin.site.register(Profiles, ProfilesAdmin)
 admin.site.register(PlanNumbers, PlanNumbersAdmin)
-
-
-def trigger_notification():
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        'plan',
-        {
-            'type': 'send_notification',
-            'message': 'Updated',
-        }
-    )
-
+admin.site.register(ChartPlans, ChartPlansAdmin)
