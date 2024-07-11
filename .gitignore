@@ -3,7 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 config_data.txt
-settings_prod.py
+settings_local.py
+settings_docker.py
+initial_script.py
 # all python files in the root dir
 /*.py
 # C extensions
@@ -11,8 +13,12 @@ settings_prod.py
 *.xls
 *.xlsx
 
+
 # My dirs
 KIS_queries/
+envs/
+feauters/
+postgres/data/
 
 # Distribution / packaging
 .Python
@@ -65,7 +71,7 @@ cover/
 *.mo
 *.pot
 
-# Django stuff:
+# Django stuff
 *.log
 db.sqlite3
 db.sqlite3-journal

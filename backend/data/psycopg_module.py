@@ -77,7 +77,7 @@ class BaseConnectionDB:
         try:
             self.conn = psycopg2.connect(user=self.user, password=self.password,
                                          dbname=self.dbname, host=self.host, port=self.port)
-        except (OperationalError, UnicodeDecodeError, UndefinedTable,
+        except (OperationalError, UnicodeDecodeError,
                 SyntaxError, ProgrammingError) as connection_error:
             self.error = connection_error
             logger.error(str(self.error).rstrip('\n'))
@@ -94,7 +94,7 @@ class BaseConnectionDB:
         Read-only property represent boll status in integer format.
 
         :return: *int*: Connection status. If return "0" - connection is opened now.
-         If "1" - connection is already closed. If "-2" - connection is already closed.
+         If "1" - connection is already closed. If "-2" - was not opened or closed with error.
         """
         if self.error is not None:
             return -2, self.error
@@ -126,9 +126,13 @@ class BaseConnectionDB:
         :return: *list*: Result set as a list of tuples.
         """
         cursor = self.conn.cursor()
-        cursor.execute(query)
-        queryset = cursor.fetchall()
-        return queryset
+        try:
+            cursor.execute(query)
+            queryset = cursor.fetchall()
+            return queryset
+        except (ProgrammingError, UndefinedTable) as e:
+            print(e)
+            pass
 
     @property
     def get_connection_data(self):

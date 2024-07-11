@@ -14,144 +14,60 @@ class QuerySets:
 
     today = date.today
 
-    ARRIVED = f"""
-               SELECT
-               	  1 AS Госпитизировано,
-               	  mm.dept_get_name(h.dept_id) AS Отделение,
-               	  ect.dzm56 AS Канал_госпитализации,
-               		CASE h.patienttype
-               			WHEN '0' THEN 'ЗЛ'
-               			WHEN '1' THEN 'Иногородний'
-               			WHEN '2' THEN 'НР'
-               			WHEN '3' THEN 'НИЛ'
-               			WHEN '4' THEN 'Контрагент'
-               			WHEN '5' THEN 'ДМС'
-               			WHEN '-1' THEN 'Не указано'
-               		ELSE h.patienttype::TEXT
-               		END AS Тип_пациента
-               
-               FROM mm.mdoc m
-               JOIN mm.hospdoc h ON h.mdoc_id = m.id
-               JOIN mm.ehr_case ec ON ec.id = h.ehr_case_id
-               JOIN mm.ehr_case_title ect ON ect.caseid  = ec.id 
-               
-               WHERE ec.create_dt BETWEEN DATE('{today()}') - INTERVAL '1 day, -6 hours' AND DATE('{today()}') - INTERVAL '-6 hours'
-               
-               UNION ALL 									
-               
-               SELECT 
-                      0 AS отказано,
-               	   'Приемное' AS Отделение,
-               	    ect2.dzm56 AS Канал_госпитализации,
-               		  CASE a.patienttype
-               			WHEN '0' THEN 'ЗЛ'
-               			WHEN '1' THEN 'Иногородний'
-               			WHEN '2' THEN 'НР'
-               			WHEN '3' THEN 'НИЛ'
-               			WHEN '4' THEN 'Контрагент'
-               			WHEN '5' THEN 'ДМС'
-               			WHEN '-1' THEN 'Не указано'
-               		ELSE a.patienttype::TEXT
-               		END AS Тип_пациента
-               		FROM mm.ambticket a
-                    JOIN mm.ehr_case ec ON a.ehr_case_id = ec.id
-               		JOIN mm.hosp_refuse hr ON hr.ambticket_id = a.id 
-               		JOIN mm.ehr_case_title ect2 ON ect2.caseid  = a.ehr_case_id
-               
-               WHERE ec.create_dt BETWEEN DATE('{today()}') - INTERVAL '1 day, -6 hours' AND DATE('{today()}') - INTERVAL '-6 hours';
-               """
+    KIS_PROFILES = """
+                   SELECT id, name
+                   FROM mm.profile_med;
+                   """
 
-    DEPT_HOSP = f"""
-                 SELECT 
-                 CASE pm.name
-                 	WHEN  'акушерству и гинекологии (за исключением использования вспомогательных репродуктивных технологий)' THEN 'Гинекология'
-                 	ELSE pm.name
-                 END AS профиль,
-                 count (m.id) AS cnt
+    ARRIVED = """
+              SELECT 
+              ar.status,
+              ar.dept,
+              ar.channel,
+              ar.patient_type 
+              FROM mm.arrived ar
+              WHERE dates BETWEEN CURRENT_DATE - INTERVAL '18 hours' and CURRENT_DATE + INTERVAL '6 hours';
+              """
 
-                 FROM mm.mdoc m
-                 JOIN mm.hospdoc h ON h.mdoc_id = m.id
-                 JOIN mm.ehr_case ec ON ec.id = h.ehr_case_id
-                 JOIN mm.ehr_case_title ect ON ect.caseid  = ec.id 
-                 JOIN mm.dept d ON d.id = h.dept_id
-                 JOIN mm.profile_med pm ON pm.id = d.profile_med_id 
+    DEPT_HOSP = """
+                SELECT profile_id, amount FROM mm.dept_hosp
+                WHERE dates BETWEEN CURRENT_DATE - INTERVAL '18 hours' and CURRENT_DATE + INTERVAL '6 hours';
+                """
 
-                 WHERE ec.create_dt BETWEEN current_date - INTERVAL '1 day, -6 hours' AND current_date - INTERVAL '-6 hours'
+    SIGNOUT = """
+              SELECT 
+              sg.dept,
+              sg.status
+              FROM mm.signout sg
+              WHERE dates BETWEEN CURRENT_DATE - INTERVAL '18 hours' and CURRENT_DATE + INTERVAL '6 hours';
+              """
 
-                 GROUP BY d.name, pm.name
-                 ORDER BY cnt DESC;
-                 """
+    DEADS = """
+            SELECT 
+            dd.pat_fio,
+            dd.ib_num,
+            dd.sex,
+            dd.agee,
+            dd.arriving_dt,
+            dd.state,
+            dd.dept,
+            dd.days,
+            dd.diag_arr,
+            dd.diag_dead
+            FROM mm.deads dd
+            WHERE dates BETWEEN CURRENT_DATE - INTERVAL '18 hours' and CURRENT_DATE + INTERVAL '6 hours';
+            """
 
-    SIGNOUT = f"""
-               SELECT mm.dept_get_name(h.dept_id) AS Отделение,
-                CASE h.hosp_outcome_id
-            		WHEN '5' THEN 'Умер в стационаре'
-            		WHEN '4' THEN 'Переведён в другую МО из стационара'
-            	ELSE 'Выписан'
-            	END AS Исход
- 
-               FROM mm.mdoc m
-               JOIN mm.hospdoc h ON h.mdoc_id = m.id
-               
-               WHERE h.leave_dt BETWEEN DATE('{today()}') - INTERVAL '1 day, -6 hours' AND DATE('{today()}') - INTERVAL '-6 hours'
-               ORDER BY h.hosp_outcome_id;  
-               """
-#Добавить mm.emp_get_fio_by_id (h.doctor_emp_id) - Лечащий врач
-    DEADS = f"""
-             SELECT
-	         mm.famaly_io(m.surname,m.name,m.patron) AS ФИО_Пациента,
-             m.num||'-'||m.YEAR AS №ИБ,
-                 CASE m.sex
-	         		WHEN '1' THEN 'Муж'
-	         		WHEN '2' THEN 'Жен'	
-	         	END,
-	         EXTRACT(YEAR from age(m.beg_dt, p.birth)) as Возраст,
-	         h.dept_dt AS Дата_поступления,
-	         ec.gravity AS Состояние_при_поступлении,
-	         mm.dept_get_name(h.dept_id) AS Отделение, --отделение в которой умер пациент
-	         h.bed_days AS кол_во_койко_дней,
-                 (SELECT ic.kod
-                     FROM mm.ds ds
-                     JOIN mm.icd10 ic ON ic.id = ds.icd10_id
-                      	  WHERE ds.ds_type_id = 4
-                       	  AND ds.ehr_case_id = h.ehr_case_id
-                           ORDER BY ds.create_dt DESC
-                           LIMIT 1) AS Диаг_поступление,
-             	    	h.final_diag_text AS Диаг_выписка
-             	    	
-             FROM mm.mdoc m
-             JOIN mm.hospdoc h ON h.mdoc_id = m.id
-             JOIN mm.people p ON p.id = m.people_id
-             JOIN mm.ehr_case ec ON ec.id = h.ehr_case_id
- 
-             WHERE h.leave_dt BETWEEN current_date - INTERVAL '1 day, -6 hours' AND current_date - INTERVAL '-6 hours'
-             AND h.hosp_outcome_id ='5' -- 5, умер в стационаре;
-             """
-
-    OAR_ARRIVED_QUERY = f"""
-                         SELECT 
-                         	    mm.famaly_io(m.surname,m.name,m.patron) AS ФИО_Пациента,
-                                m.num||'-'||m.YEAR AS №ИБ,
-                         	   EXTRACT(YEAR from age(m.beg_dt, p.birth)) as Возраст,
-                         	   mm.dept_get_name(h.dept_id) AS Отделение,
-                         	   mm.emp_get_fio_by_id (h.doctor_emp_id) AS Лечащий_врач,
-                         (SELECT ic.kod
-                            FROM mm.ds ds
-                            JOIN mm.icd10 ic ON ic.id = ds.icd10_id
-                            WHERE ds.ds_kind_id = 1
-                            AND ds.ehr_case_id = h.ehr_case_id
-                            ORDER BY ds.create_dt DESC
-                            LIMIT 1) AS Диаг_поступление
-                         
-                         FROM mm.mdoc m
-                         JOIN mm.hospdoc h ON h.mdoc_id = m.id
-                         JOIN mm.people p ON p.id = m.people_id
-                         
-                         WHERE h.hosp_dt BETWEEN current_date - INTERVAL '1 day, -6 hours' AND current_date - INTERVAL '-6 hours'
-                         AND h.dept_dt BETWEEN current_date - INTERVAL '1 day, -6 hours' AND current_date - INTERVAL '-6 hours'
-                         AND h.dept_id IN (SELECT d.id from mm.dept d WHERE d.dept_med_type_id = 10220)
-                         ORDER BY h.dept_id DESC;
-                         """
+    OAR_ARRIVED_QUERY = """
+                        SELECT 
+                        pat_fio,
+                        ib_num, 
+                        ages, 
+                        dept,
+                        doc_fio, 
+                        diag_start FROM mm.oar_arrived
+                        WHERE dates BETWEEN CURRENT_DATE - INTERVAL '18 hours' and CURRENT_DATE + INTERVAL '6 hours';
+                        """
 
     OAR_MOVED_QUERY = f"""
                        SELECT 
@@ -245,49 +161,14 @@ class QuerySets:
     }
 
     DMK_COLUMNS = ['arrived', 'hosp', 'refused', 'signout', 'deads', 'reanimation']
+    DMK_DETAILS_COLUMNS = ('registered',)
 
     # Filter-words for filter_dataset method of DataProcessing class.
     # If needed to add something more - "aapend" it, e.g. insert at the end of existing matched list.
     channels = ['103', 'Поликлиника', '103 Поликлиника', 'самотек', 'план']
-    statuses = ['ЗЛ', 'Иногородний', 'НР', 'НИЛ', 'ДМС', 'Не указано'] 
-    signout = ['Умер в стационаре', 'Переведён в другую МО из стационара', 'Выписан']
-    oar_depts = ['Отделение реанимации и интенсивной терапии № 1', 
-                 'Отделение реанимации и интенсивной терапии № 2',
-                 'Отделение реанимации и интенсивной терапии для больных с ОНМК',
-                 'Отделение реанимации и интенсивной терапии для больных с острым инфарктом миокарда',
-                 'Отделение анестезиологии-реанимации'
-                ]
-
-    # Dict for mapping with serializer fields (relates to "план/факт по профилям" table).
-    # All english names is fields of serializer.
-    profiles_mapping = {
-        'анестезиологии и реаниматологии': 'oar_p',
-        'хирургии': 'surgery_p',
-        'терапии': 'therapy_p',
-        'неотложной медицинской помощи': 'emer1_p',
-        'акушерству и гинекологии (за исключением использованиявспомогательных репродуктивных технологий)': 'gynekology_p',
-        'рентгенологии': 'xray_p',
-        'скорой медицинской помощи': 'emer2_p',
-        'трансфузиологии': 'transfusiology_p',
-        'общей практике': 'gpractice_p',
-        'наркологии': 'narkology_p',
-        'урологии': 'urology_p',
-        'клинической лабораторной диагностике': 'lab_p',
-        'реаниматологии': 'rean_p',
-        'травматологии и ортопедии': 'truma_p',
-        'нейрохирургии': 'neuro_p',
-        'ультразвуковой диагностике': 'ultrasound_p',
-        'функциональной диагностике': 'func_p',
-        'кардиологии': 'cardio_p',
-        'эндокринологии': 'endo_p',
-        'неврологии': 'neurology_p',
-        'медицинской статистике': 'static_p',
-        'эпидемиологии': 'epid_p',
-        'неонатологии': 'neon_p',
-        'гистологии': 'gyst_p',
-        'эндоскопии': 'endocop_p',
-        'пульмонологии': 'pulmo_p'
-    }
+    statuses = ['ЗЛ', 'Иногородний', 'НР', 'НИЛ', 'ДМС', 'Не указано']
+    signout = ['Умер', 'Переведен', 'Выписан']
+    oar_depts = ['ОРИТ №1', 'ОРИТ №2', 'ОРИТ №3']
 
     # Dict for mapping columns on russian language with serializer fields (relates to "выписанные по отделениям" table).
     # All english names is fields of serializer.
@@ -317,7 +198,7 @@ class QuerySets:
         'Пульмонологическое отделение': 'pulmonology_d'
     }
 
-    def queryset_for_dmk(self):
+    def queryset_for_dmk(self) -> list[str]:
         """
         Create list of lists queries from class attributes needed for data to DMK DB.
 
@@ -326,7 +207,7 @@ class QuerySets:
         result = [self.ARRIVED, self.SIGNOUT, self.OAR_ARRIVED_QUERY, self.DEPT_HOSP]
         return result
 
-    def queryset_for_kis(self):
+    def queryset_for_kis(self) -> list[str]:
         """
         Create list of lists queries from class attributes needed for data to front-end.
 
@@ -337,7 +218,8 @@ class QuerySets:
         result = dmk_queries + [self.OAR_MOVED_QUERY, self.OAR_CURRENT_QUERY]
         return result
 
-    def chosen_date_query(self, queryset: Union[str, list], chosen_date: str) -> list:
+    @staticmethod
+    def chosen_date_query(queryset: Union[str, list], chosen_date: str) -> list:
         """
         Replace date in the given query to passed and return query with needed date.
 
@@ -346,9 +228,59 @@ class QuerySets:
         :return: *str*: Changed query contains actual chosen date.
         """
         if type(queryset) is list:
-            new_query = [query.replace(str(self.today()), chosen_date) for query in queryset]
+            new_query = [query.replace('CURRENT_DATE', f'DATE \'{chosen_date}\'') for query in queryset]
             return new_query
-        new_query = queryset.replace(str(self.today()), chosen_date)
+        new_query = queryset.replace('CURRENT_DATE', f'DATE \'{chosen_date}\'')
         return [new_query]
 
+    @staticmethod
+    def insert_accum_query(dataset, dates, id_cnt) -> str:
+        profile_id, number = dataset[0], dataset[1]
+        raw_query = f"""
+                     INSERT INTO public.data_accumulationofincoming (id, dates, number, profile_id) 
+                     VALUES 
+                     ({id_cnt}, '{dates}', {number}, '{profile_id}');
+                     """
+        return raw_query
 
+
+class EmergencyQueries:
+
+    WAITINGS = """
+               SELECT pat_fio, ib_num, dept, waiting_time, doc_fio from mm.waitings;
+               """
+
+    TOTAL_REFUSE = """
+                   SELECT doc_fio, total_refuse FROM mm.total_refuse;
+                   """
+
+    __DETAIL_REFUSE = """
+                      SELECT pat_fio, ib_num, diag, refuse_reason, refuse_date, doc_fio
+                      FROM mm.refuse WHERE doc_fio = 'passed_doc_fio';
+                      """
+
+    COLUMNS = {
+        'total_refuse': ['doc_fio', 'refuses_amount'],
+        'detail_refuse': ['pat_fio', 'ib_num', 'diag', 'refuse_reason', 'refuse_date', 'doc_fio'],
+        'waitings': ['pat_fio', 'ib_num', 'dept', 'waiting_time', 'doc_fio'],
+    }
+
+    def get_emergency_queries(self) -> list[str]:
+        queries_list = [self.WAITINGS, self.TOTAL_REFUSE]
+        return queries_list
+
+    def get_detail_refuse_query(self, doc_names: list) -> list[str]:
+        refuse_query = [self.__DETAIL_REFUSE.replace('passed_doc_fio', f'{name}') for name in doc_names]
+        return refuse_query
+
+
+class PlanHospitalizationQueries:
+
+    PLAN_HOSP = """SELECT week, dates, dept, cnt_plan FROM mm.plan_hosp ORDER BY dates asc;"""
+
+    COLUMNS = {
+        'common_field': ['week', 'dates', 'dept', 'cnt_plan']
+    }
+
+    def get_plan_hosp_query(self) -> list[str]:
+        return [self.PLAN_HOSP]

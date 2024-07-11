@@ -7,42 +7,34 @@ import '../signout_detail_board/signout_table.css';
 
 
 const oarDeadsColumns = ['ФИО', '№ ИБ', 'Пол', 'Возраст', 'Дата поступления',
-                      'Состояние при поступлении', 'Кол-во койко дней',
-                      'Дигноз при поступлении', 'Дигноз при выписке']
+                         'Состояние при поступлении', 'Кол-во койко дней',
+                         'Диaгноз при поступлении', 'Диaгноз при выписке']
 
 
 const DeadsOARDetailTable = ({ departament }) => {
   const oars = useContext(DataContext).kis;
 
-
-  let deads = oars.oar_deads;
-  deads = DeadsOarTable(deads);
-
-
-
+  let deads;
   let filteredData;
-  let columns;
 
-  if (deads.length !== 0) {
-
+  if (oars.deads.length > 0) {
+    deads = DeadsOarTable(oars.deads);
     filteredData = deads
-    .filter(dict => dict['Отделение'] === departament)
-    .map(({ Отделение, ...rest }) => rest);
-
-    columns = Object.keys(deads[0])
-    .filter(key => key !== 'Отделение')
-    .map(key => ({
-      Header: key,
-      accessor: key,
-    }));
+      .sort((a, b) => {
+        if (a['ФИО'] < b['ФИО']) return -1;
+        if (a['ФИО'] > b['ФИО']) return 1;
+        return 0;
+      })
+      .filter(dict => dict['Отделение'] === departament)
+      .map(({ Отделение, ...rest }) => rest);
   } else {
     filteredData = [];
-    columns = oarDeadsColumns.map(key => ({
-      Header: key,
-      accessor: key,
-    }));
   }
 
+  const columns = oarDeadsColumns.map(key => ({
+    Header: key,
+    accessor: key,
+  }));
 
   // Create a table instance
   const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } = useTable({
@@ -53,7 +45,7 @@ const DeadsOARDetailTable = ({ departament }) => {
   return (
     <div className='deads-table-container'>
       <h2 className='detail_block_header'> Детализация по отделению </h2>
-      <table className='deads-table' {...getTableProps()} >
+      <table className='table' {...getTableProps()} >
         <thead>
           {headerGroups.map(headerGroup => (
             <tr {...headerGroup.getHeaderGroupProps()}>

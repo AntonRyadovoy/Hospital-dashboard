@@ -1,43 +1,38 @@
 import React, { useContext } from 'react';
 import { useTable } from 'react-table';
-import DataContext from "../../DataContext";
+import DataContext from '../../DataContext';
 import { DeadTableProcess } from '../../Feauters';
 import './signout_table.css';
 
 
 const deadsColumns = ['ФИО', '№ ИБ', 'Пол', 'Возраст', 'Отделение', 'Дата поступления',
                       'Состояние при поступлении', 'Кол-во койко дней',
-                      'Дигноз при поступлении', 'Дигноз при выписке']
+                      'Диагноз при поступлении', 'Диагноз при выписке', 'Лечащий врач']
 
 const SignOutDetailTable = () => {
   let kisDeads = useContext(DataContext).kis;
   kisDeads = kisDeads.deads;
-  const readyRuData = DeadTableProcess(kisDeads);
+  const readyRuData = DeadTableProcess(kisDeads).sort((a, b) => {
+    if (a['ФИО'] < b['ФИО']) return -1;
+    if (a['ФИО'] > b['ФИО']) return 1;
+    return 0;
+  });
 
-  let columns;
-
-  if (readyRuData.length !== 0) {
-  // Define columns
-    columns = Object.keys(readyRuData[0]).map(key => ({
-      Header: key,
-      accessor: key,
-    }))} else {
-    columns = deadsColumns.map(key => ({
-      Header: key,
-      accessor: key,
-    }))
-  }
+  const columns = deadsColumns.map(key => ({
+    Header: key,
+    accessor: key,
+  }))
 
   // Create a table instance
   const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } = useTable({
     columns,
-    data: readyRuData, // Wrap readyRuData in an array to use with react-table
+    data: readyRuData,
   });
 
   return (
     <div className='deads-table-container'>
       <h2 className='detail_block_header'> Детализация по умершим </h2>
-      <table className='deads-table' {...getTableProps()} >
+      <table className='table' {...getTableProps()} >
         <thead>
           {headerGroups.map(headerGroup => (
             <tr {...headerGroup.getHeaderGroupProps()}>
